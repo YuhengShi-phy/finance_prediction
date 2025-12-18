@@ -22,7 +22,7 @@ def load_data(file_path):
 def preprocess_data(df, sequence_length=30):
     # 选择特征列（去掉标签和时间相关列）
     feature_columns = [
-        # "n_close",
+        "n_close",
         # "amount_delta",
         "n_midprice",
         # "n_bid1",

@@ -1,8 +1,72 @@
 from numpy.typing import NDArray
-from sklearn.preprocessing import RobustScaler
+from sklearn.preprocessing import RobustScaler, MinMaxScaler, FunctionTransformer
+from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import numpy as np
+
+selected_features = [
+    # 1. 核心价格特征（2个）
+    "n_close",  # 标准化后的收盘价
+    "n_midprice",  # 标准化后的中间价
+    # 2. 市场微观结构（5个）
+    "bid_ask_spread",  # 买卖价差
+    "size_imbalance_1",  # 一档买卖量不平衡
+    "microprice",  # 微观价格（考虑深度的加权价格）
+    "order_flow_imbalance",  # 订单流不平衡
+    "total_depth",  # 总市场深度
+    # 3. 动量与趋势（4个）
+    "midprice_momentum_20",  # 20期动量
+    "macd",  # MACD线
+    "ma_cross_5_20",  # 移动平均线交叉信号
+    "price_acceleration",  # 价格加速度
+    # 4. 波动率特征（3个）
+    "volatility_20",  # 20期波动率
+    "bollinger_width",  # 布林带宽度
+    "parkinson_vol_20",  # Parkinson波动率（更准确的高低价估计）
+    # 5. 技术指标（3个）
+    "rsi_14",  # 14期RSI
+    "stochastic_k",  # 随机指标K值
+    "bias_20",  # 20期乖离率
+    # 6. 成交量与流动性（2个）
+    "amount_delta",  # 成交额变化
+    "volume_momentum",  # 成交量动量
+    # 7. 时间特征（1个）
+    "time_sin",  # 时间正弦编码
+]
+
+price_features = [
+    "n_close",  # 已标准化
+    "n_midprice",  # 已标准化
+    "microprice",  # 需要特别处理
+]
+
+microstructure_features = [
+    "bid_ask_spread",  # 价差（相对值，已标准化）
+    "size_imbalance_1",  # 买卖量比，范围[-1, 1]
+    "order_flow_imbalance",  # 订单流不平衡，可能有异常值
+    "total_depth",  # 总深度，右偏分布
+]
+
+momentum_features = [
+    "midprice_momentum_20",  # 动量，可能正负
+    "macd",  # MACD，可能正负
+    "ma_cross_5_20",  # 交叉信号，[-1, 1]范围
+    "price_acceleration",  # 加速度，可能正负
+]
+
+volatility_features = [
+    "volatility_20",  # 波动率，严格正数，右偏
+    "bollinger_width",  # 布林带宽度，严格正数
+    "parkinson_vol_20",  # Parkinson波动率，严格正数
+]
+
+volume_features = [
+    "amount_delta",  # 成交额变化，可能正负，有异常值
+    "volume_momentum",  # 成交量动量
+]
+
+time_features = ["time_sin"]  # 已在[-1, 1]范围
 
 
 class MarketDataFeatureEngineer:
@@ -527,6 +591,41 @@ def sequentialize_certain_features(
 
     print(f"Sequentializing features... done.")
     return np.array(X), np.array(y)
+
+
+def display_detail(df: pd.DataFrame, feature: str):
+    print(df[feature].head())
+
+
+# TODO: Write scaling functions for different kinds of features
+
+
+def scale_price_feature(X_train: NDArray, X_test: NDArray):
+    pass
+
+
+def scale_microstructure_feature(X_train: NDArray, X_test: NDArray):
+    pass
+
+
+def scale_momentum_feature(X_train: NDArray, X_test: NDArray):
+    pass
+
+
+def scale_volatility_feature(X_train: NDArray, X_test: NDArray):
+    pass
+
+
+def scale_technical_feature(X_train: NDArray, X_test: NDArray):
+    pass
+
+
+def scale_volume_feature(X_train: NDArray, X_test: NDArray):
+    pass
+
+
+def scale_time_feature(X_train: NDArray, X_test: NDArray):
+    pass
 
 
 def split_and_scale(X: NDArray, y: NDArray, test_size=0.2):
