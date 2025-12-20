@@ -63,35 +63,12 @@ feature_columns = [
 ]
 
 
-def check_feature_distributions(df, features):
-    """
-    检查特征分布，找出问题特征
-    """
-    results = []
-    for feature in features:
-        data = df[feature].values
-        stats = {
-            "feature": feature,
-            "min": np.nanmin(data),
-            "max": np.nanmax(data),
-            "mean": np.nanmean(data),
-            "std": np.nanstd(data),
-            "has_nan": np.any(np.isnan(data)),
-            "has_inf": np.any(np.isinf(data)),
-            "negative_count": np.sum(data < 0),
-            "zero_count": np.sum(data == 0),
-            "less_than_minus1": np.sum(data < -1) if np.any(data < -1) else 0,
-        }
-        results.append(stats)
-
-    return pd.DataFrame(results)
-
-
 def main():
     df_with_features = pd.read_csv("./df_with_features.csv")
+    df_with_features = dp.add_midprice_label(df_with_features, 5)
     df_with_features = df_with_features.tail(len(df_with_features) - 51)
     # print("Checking...")
-    # stats_df = check_feature_distributions(df_with_features, dp.selected_features)
+    # stats_df = eval.check_feature_distributions(df_with_features, dp.selected_features)
     #
     # # 查看有问题的特征
     # problem_features = stats_df[
@@ -104,7 +81,7 @@ def main():
     # print(stats_df)
     sequence_length = 100
     X, y = dp.sequentialize_certain_features(
-        df_with_features, dp.selected_features, "label_5", sequence_length
+        df_with_features, dp.selected_features, "midprice_after_5", sequence_length
     )
     X_train, X_test, y_train, y_test = dp.split_and_scale(X, y)
 
@@ -114,7 +91,7 @@ def main():
     # X_train, y_train = apply_undersampling(X_train, y_train)
     # 构建模型
     input_shape = (X_train.shape[1], X_train.shape[2])
-    model = md.build_classification_model(input_shape)
+    model = md.build_continuous_model(input_shape)
     model.summary()
 
     # 训练模型
@@ -122,7 +99,7 @@ def main():
         X_train,
         y_train,
         validation_data=(X_test, y_test),
-        epochs=2,
+        epochs=3,
         batch_size=128,
         verbose=1,
         class_weight={0: 4, 1: 1, 2: 4},
@@ -130,12 +107,17 @@ def main():
 
     # 预测示例
     y_pred = model.predict(X_test)
-    y_pred = np.argmax(y_pred, axis=1)
+    pt.plot_predict_curve(y_test, y_pred)
+    # y_pred = np.argmax(y_pred, axis=1)
+    y_pred = eval.get_label(y_pred, X_test[:, 99, 1], 5)
+    y_test = eval.get_label(y_test, X_test[:, 99, 1], 5)
     test_score = eval.calculate_f_beta_multiclass(y_test, y_pred)
     print(f"The f beta score on test: {test_score}")
 
     y_train_pred = model.predict(X_train)
-    y_train_pred = np.argmax(y_train_pred, axis=1)
+    # y_train_pred = np.argmax(y_train_pred, axis=1)
+    y_train_pred = eval.get_label(y_train_pred, X_train[:, 99, 1], 5)
+    y_train = eval.get_label(y_train, X_train[:, 99, 1], 5)
     train_score = eval.calculate_f_beta_multiclass(y_train, y_train_pred)
     print(f"The f beta score on train: {train_score}")
 

@@ -1,8 +1,8 @@
 import numpy as np
+import pandas as pd
 
 
-# TODO: Deal with both the continnuous and balanced
-def change_label(y, X, time_delay):  # y可为y_test或y_pred，Day为一个数[5,10,20,40,60]
+def get_label(y, X, time_delay):  # y可为y_test或y_pred，Day为一个数[5,10,20,40,60]
     # X = X_test[:, 99, 0]
     if time_delay in [5, 10]:
         alpha = 0.0005
@@ -17,6 +17,8 @@ def change_label(y, X, time_delay):  # y可为y_test或y_pred，Day为一个数[
     y = np.asarray(y)
     X = np.asarray(X)
 
+    # Squeeze to prevent broadcast error
+    y = np.squeeze(y)
     price_diff = y - X
 
     # 使用 np.select 进行高效的条件选择
@@ -27,7 +29,6 @@ def change_label(y, X, time_delay):  # y可为y_test或y_pred，Day为一个数[
     return labels.tolist()
 
 
-# TODO: Split into several functions to make better use
 def calculate_f_beta_multiclass(true_labels, pred_labels, beta=0.5):
     # 计算recall：真实标签不是1的样本中预测正确的比例
     non_one_mask = true_labels != 1
@@ -38,6 +39,8 @@ def calculate_f_beta_multiclass(true_labels, pred_labels, beta=0.5):
     else:
         recall = 0.0
 
+    print(f"Recall: {recall}")
+
     # 计算precision：预测标签不是1的样本中预测正确的比例
     pred_non_one_mask = pred_labels != 1
     if np.sum(pred_non_one_mask) > 0:
@@ -47,6 +50,7 @@ def calculate_f_beta_multiclass(true_labels, pred_labels, beta=0.5):
     else:
         precision = 0.0
 
+    print(f"Precision: {precision}")
     # 计算F-beta分数
     if precision + recall == 0:
         f_beta = 0.0
@@ -58,6 +62,25 @@ def calculate_f_beta_multiclass(true_labels, pred_labels, beta=0.5):
     return f_beta
 
 
-# TODO: Insight into data, including especially numbers of different labels
-def get_data_count():
-    pass
+def check_feature_distributions(df: pd.DataFrame, features: list[str]):
+    """
+    检查特征分布，找出问题特征
+    """
+    results = []
+    for feature in features:
+        data = df[feature].values
+        stats = {
+            "feature": feature,
+            "min": np.nanmin(data),
+            "max": np.nanmax(data),
+            "mean": np.nanmean(data),
+            "std": np.nanstd(data),
+            "has_nan": np.any(np.isnan(data)),
+            "has_inf": np.any(np.isinf(data)),
+            "negative_count": np.sum(data < 0),
+            "zero_count": np.sum(data == 0),
+            "less_than_minus1": np.sum(data < -1) if np.any(data < -1) else 0,
+        }
+        results.append(stats)
+
+    return pd.DataFrame(results)

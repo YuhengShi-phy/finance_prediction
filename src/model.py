@@ -74,9 +74,9 @@ def build_classification_model(input_shape, num_classes=3):
             build_base_model(input_shape),
             # Dense(256, activation="relu"),
             # Dropout(0.3),
-            Dense(128, activation="relu"),
+            Dense(128, activation="tanh"),
             Dropout(0.3),
-            Dense(64, activation="relu"),
+            Dense(64, activation="tanh"),
             Dense(num_classes, activation="softmax"),  # 3个类别：0,1,2
         ]
     )

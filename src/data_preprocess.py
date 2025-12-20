@@ -579,6 +579,11 @@ class MarketDataFeatureEngineer:
         return X, y, feature_cols
 
 
+def add_midprice_label(df: pd.DataFrame, time_delay: int):
+    df[f"midprice_after_{time_delay}"] = df["n_midprice"].shift(-time_delay)
+    return df
+
+
 def sequentialize_certain_features(
     df: pd.DataFrame, feature_columns: list[str], label_column: str, seq_length: int
 ):
@@ -597,9 +602,6 @@ def sequentialize_certain_features(
 
 def display_detail(df: pd.DataFrame, feature: str):
     print(df[feature].head())
-
-
-# TODO: Write scaling functions for different kinds of features
 
 
 def scale_train(scaler, X_train: NDArray):
