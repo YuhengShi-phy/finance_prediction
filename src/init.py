@@ -65,7 +65,8 @@ feature_columns = [
 
 def main():
     print("-" * 50)
-    X=[],y=[]
+    X_train = [],y_train = []
+    X_test = [],y_test = []
     for i in range(10):
 
         df_with_features = pd.read_csv("./merge{i}_with_features.csv")
@@ -78,11 +79,14 @@ def main():
         X_single, y_single = dp.sequentialize_certain_features(
             df_with_features, dp.selected_features, f"label_{time_delay}", sequence_length
         )
-        X = contact(X , X_single)
-        y = contact(y , y_single)
-    X_train, X_test, y_train, y_test, price_scaler = dp.split_and_scale(
-        X, y, test_size=0.2
-    )
+        X_train_single, X_test_single, y_train_single, y_test_single, price_scaler = dp.split_and_scale(
+            X_single, y_single, test_size=0.2
+        )
+        X_train = contact(X_train , X_train_single)
+        y_train = contact(y_train , y_train_single)
+        X_test = contact(X_test , X_test_single)
+        y_test = contact(y_test , y_test_single)
+
         
     print(f"训练集形状: {X_train.shape}, {y_train.shape}")
     print(f"测试集形状: {X_test.shape}, {y_test.shape}")
