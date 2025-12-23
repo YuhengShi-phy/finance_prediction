@@ -35,7 +35,7 @@ selected_features = [
     "volume_momentum",  # 成交量动量
     # 7. 时间特征（1个）
     "time_sin",  # 时间正弦编码
-    # "sym",
+    "sym",
 ]
 
 
@@ -137,6 +137,7 @@ def create_all_features(df: pd.DataFrame):
     df["parkinson_vol_20"] = np.sqrt(
         (1 / (4 * 20 * np.log(2))) * high_low_ratio.rolling(window=20).sum()
     )
+    # df["n_midprice"] = df["n_midprice"] - 1
 
     print(f"特征工程完成")
 
@@ -205,23 +206,8 @@ def split_and_scale(X: NDArray, y: NDArray, test_size=0.2):
 
     print("Scaling data...")
 
-    # Different scalers
-    price_scaler = RobustScaler()
-    # print(f"Initial: {price_scaler.center_,price_scaler.scale_}")
-    microstructure_scaler = Pipeline(
-        [
-            ("log", FunctionTransformer(lambda x: np.sign(x) * np.log1p(np.abs(x)))),
-            ("scale", RobustScaler()),
-        ]
-    )
-    momentum_scaler = RobustScaler(quantile_range=(10, 90))
-    volatility_scaler = Pipeline(
-        [
-            ("log", FunctionTransformer(lambda x: np.sign(x) * np.log1p(np.abs(x)))),
-            ("scale", RobustScaler()),
-        ]
-    )
-    technical_scaler = RobustScaler()
+    balance_scaler = MinMaxScaler(feature_range=(-1, 1))
+
     volume_scaler = Pipeline(
         [
             (
@@ -233,28 +219,18 @@ def split_and_scale(X: NDArray, y: NDArray, test_size=0.2):
     )
     X_train_scaled = np.concatenate(
         [
-            scale_train(price_scaler, X_train[:, :, 0:3]),
-            # X_train[:, :, 0:3],
-            scale_train(microstructure_scaler, X_train[:, :, 3:7]),
-            scale_train(momentum_scaler, X_train[:, :, 7:11]),
-            scale_train(volatility_scaler, X_train[:, :, 11:14]),
-            scale_train(technical_scaler, X_train[:, :, 14:17]),
+            scale_train(balance_scaler, X_train[:, :, 0:17]),
             scale_train(volume_scaler, X_train[:, :, 17:19]),
-            X_train[:, :, 19].reshape(X_train.shape[0], X_train.shape[1], 1),
+            X_train[:, :, 19:],
         ],
         axis=2,
     )
     # print(f"After Train Scaling: {price_scaler.center_,price_scaler.scale_}")
     X_test_scaled = np.concatenate(
         [
-            scale_test(price_scaler, X_test[:, :, 0:3]),
-            # X_test[:, :, 0:3],
-            scale_test(microstructure_scaler, X_test[:, :, 3:7]),
-            scale_test(momentum_scaler, X_test[:, :, 7:11]),
-            scale_test(volatility_scaler, X_test[:, :, 11:14]),
-            scale_test(technical_scaler, X_test[:, :, 14:17]),
+            scale_test(balance_scaler, X_test[:, :, 0:17]),
             scale_test(volume_scaler, X_test[:, :, 17:19]),
-            X_test[:, :, 19].reshape(X_test.shape[0], X_test.shape[1], 1),
+            X_test[:, :, 19:],
         ],
         axis=2,
     )
@@ -276,3 +252,315 @@ def inverse_scale(scaler, X_scaled: np.ndarray):
     X_original = X_original_2d.reshape(original_shape)
 
     return X_original
+
+
+def comprehensive_scaler_selection(
+    df, numerical_cols=None, skew_threshold=1.0, outlier_threshold=1.5
+):
+    """
+    综合检查并推荐Scaler的完整流程
+    """
+    if numerical_cols is None:
+        numerical_cols = df.select_dtypes(include=[np.number]).columns
+
+    print("=" * 60)
+    print("数据预处理Scaler选择分析报告")
+    print("=" * 60)
+
+    # 1. 检查偏度
+    print("\n📊 1. 数据分布检查（偏度分析）")
+    print("-" * 40)
+    skew_df = check_skewness(df, numerical_cols, skew_threshold)
+
+    # 2. 检查异常值
+    print("\n📊 2. 异常值检查（IQR方法）")
+    print("-" * 40)
+    outliers_df = detect_outliers_iqr(df, numerical_cols, outlier_threshold)
+
+    # 3. 检查值范围
+    print("\n📊 3. 值范围检查")
+    print("-" * 40)
+    range_df = check_value_ranges(df, numerical_cols)
+
+    # 4. 综合推荐
+    print("\n🎯 4. 综合Scaler推荐")
+    print("-" * 40)
+
+    recommendations = {}
+    for col in numerical_cols:
+        # 获取该特征的各项检查结果
+        skew_info = skew_df[skew_df["feature"] == col].iloc[0]
+        outlier_info = outliers_df[outliers_df["feature"] == col].iloc[0]
+        range_info = range_df[range_df["feature"] == col].iloc[0]
+
+        # 决策逻辑
+        if skew_info["is_highly_skewed"]:
+            recommendations[col] = {
+                "scaler": "PowerTransformer + StandardScaler",
+                "reason": f"严重偏态（偏度={skew_info['skewness']:.2f}）",
+            }
+        elif outlier_info["is_high_outlier"]:
+            recommendations[col] = {
+                "scaler": "RobustScaler",
+                "reason": f"异常值较多（{outlier_info['outlier_percentage']:.1f}%）",
+            }
+        elif range_info["has_clear_bounds"]:
+            recommendations[col] = {
+                "scaler": "MinMaxScaler",
+                "reason": f"有明确边界（{range_info['bound_type']}）",
+            }
+        else:
+            recommendations[col] = {
+                "scaler": "StandardScaler",
+                "reason": "分布相对正常，无明显异常值",
+            }
+
+    # 打印推荐结果
+    rec_df = pd.DataFrame.from_dict(recommendations, orient="index")
+    rec_df.index.name = "feature"
+    rec_df.reset_index(inplace=True)
+
+    print("\n推荐方案汇总:")
+    print(rec_df.to_string(index=False))
+
+    # 统计各Scaler使用频率
+    scaler_counts = rec_df["scaler"].value_counts()
+    print(f"\n📈 Scaler使用统计:")
+    for scaler, count in scaler_counts.items():
+        print(f"  {scaler}: {count}个特征")
+
+    # 给出最终建议
+    if len(scaler_counts) == 1:
+        print(f"\n✅ 建议所有特征使用: {scaler_counts.index[0]}")
+    else:
+        print(f"\n⚠️ 建议使用混合Scaler（不同特征使用不同Scaler）")
+        print("可以使用ColumnTransformer:")
+        print(
+            """
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler, PowerTransformer
+
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('power', PowerTransformer(), [偏态特征列表]),
+        ('robust', RobustScaler(), [异常值多的特征列表]),
+        ('minmax', MinMaxScaler(), [有边界特征列表]),
+        ('standard', StandardScaler(), [其他特征])
+    ])
+        """
+        )
+
+    return {
+        "skew_df": skew_df,
+        "outliers_df": outliers_df,
+        "range_df": range_df,
+        "recommendations": rec_df,
+    }
+
+
+def check_value_ranges(df, numerical_cols=None):
+    """
+    检查数值范围，判断是否有明确物理边界
+
+    常见有明确边界的特征：
+    - 百分比：0-100
+    - 概率：0-1
+    - 年龄：0-150
+    - 评分：1-5, 1-10
+    - 二值特征：0/1
+    """
+    if numerical_cols is None:
+        numerical_cols = df.select_dtypes(include=[np.number]).columns
+
+    range_results = []
+
+    # 常见边界条件
+    common_bounds = {
+        "percentage": (0, 100),
+        "probability": (0, 1),
+        "rating_5": (1, 5),
+        "rating_10": (1, 10),
+        "binary": (0, 1),
+        "age": (0, 150),
+    }
+
+    for col in numerical_cols:
+        data = df[col].dropna()
+        min_val = data.min()
+        max_val = data.max()
+        range_val = max_val - min_val
+
+        # 检查是否符合常见边界
+        has_clear_bounds = False
+        bound_type = None
+
+        for bound_name, (lower, upper) in common_bounds.items():
+            if min_val >= lower and max_val <= upper:
+                has_clear_bounds = True
+                bound_type = bound_name
+                break
+
+        # 自定义边界检查（根据业务知识）
+        # 例如：如果数据在[0, 255]之间，可能是图像像素
+
+        range_results.append(
+            {
+                "feature": col,
+                "min": min_val,
+                "max": max_val,
+                "range": range_val,
+                "has_clear_bounds": has_clear_bounds,
+                "bound_type": bound_type,
+                "recommendation": (
+                    "MinMaxScaler" if has_clear_bounds else "根据分布选择"
+                ),
+            }
+        )
+
+    range_df = pd.DataFrame(range_results)
+
+    # 打印有明确边界的特征
+    bounded_features = range_df[range_df["has_clear_bounds"]]
+    if len(bounded_features) > 0:
+        print(f"✅ 发现 {len(bounded_features)} 个有明确边界的特征:")
+        print(
+            bounded_features[["feature", "min", "max", "bound_type", "recommendation"]]
+        )
+        print("\n这些特征适合使用MinMaxScaler")
+
+    return range_df
+
+
+def detect_outliers_iqr(df, numerical_cols=None, threshold=1.5):
+    """
+    使用IQR方法检测异常值
+
+    threshold通常取1.5（中度异常）或3（极端异常）
+    """
+    if numerical_cols is None:
+        numerical_cols = df.select_dtypes(include=[np.number]).columns
+
+    outliers_results = []
+
+    for col in numerical_cols:
+        data = df[col].dropna()
+
+        # 计算Q1, Q3, IQR
+        Q1 = np.percentile(data, 25)
+        Q3 = np.percentile(data, 75)
+        IQR = Q3 - Q1
+
+        # 异常值边界
+        lower_bound = Q1 - threshold * IQR
+        upper_bound = Q3 + threshold * IQR
+
+        # 检测异常值
+        outliers = data[(data < lower_bound) | (data > upper_bound)]
+        n_outliers = len(outliers)
+        outlier_percentage = n_outliers / len(data) * 100
+
+        outliers_results.append(
+            {
+                "feature": col,
+                "q1": Q1,
+                "q3": Q3,
+                "iqr": IQR,
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound,
+                "n_outliers": n_outliers,
+                "outlier_percentage": outlier_percentage,
+                "is_high_outlier": outlier_percentage > 5,  # 超过5%视为有大量异常值
+                "recommendation": (
+                    "RobustScaler" if outlier_percentage > 5 else "StandardScaler"
+                ),
+            }
+        )
+
+    outliers_df = pd.DataFrame(outliers_results)
+
+    # 打印有大量异常值的特征
+    high_outlier_features = outliers_df[outliers_df["is_high_outlier"]]
+    if len(high_outlier_features) > 0:
+        print(f"⚠️ 发现 {len(high_outlier_features)} 个特征有大量异常值（>5%）:")
+        print(
+            high_outlier_features[["feature", "outlier_percentage", "recommendation"]]
+        )
+        print("\n推荐使用RobustScaler处理这些特征")
+    else:
+        print(f"✅ 异常值比例正常，可以考虑使用StandardScaler")
+
+    return outliers_df
+
+
+# 方法3：Z-score方法（适合近似正态分布）
+def detect_outliers_zscore(df, numerical_cols=None, threshold=3):
+    """使用Z-score方法检测异常值"""
+    outliers_results = []
+
+    for col in numerical_cols:
+        data = df[col].dropna()
+        z_scores = np.abs(stats.zscore(data))
+        outliers = data[z_scores > threshold]
+        outlier_percentage = len(outliers) / len(data) * 100
+
+        outliers_results.append(
+            {
+                "feature": col,
+                "outlier_percentage": outlier_percentage,
+                "is_high_outlier": outlier_percentage > 5,
+            }
+        )
+
+    return pd.DataFrame(outliers_results)
+
+
+def check_skewness(df, numerical_cols=None, threshold=1.0):
+    """
+    检查偏度，判断是否需要PowerTransformer
+
+    偏度判断标准：
+    |Skewness| < 0.5: 近似对称
+    0.5 ≤ |Skewness| < 1: 中等偏态
+    |Skewness| ≥ 1: 严重偏态（需要处理）
+    """
+    if numerical_cols is None:
+        numerical_cols = df.select_dtypes(include=[np.number]).columns
+
+    skewness_results = []
+    for col in numerical_cols:
+        skew = df[col].skew()
+        is_highly_skewed = abs(skew) >= threshold
+        skewness_results.append(
+            {
+                "feature": col,
+                "skewness": skew,
+                "abs_skewness": abs(skew),
+                "is_highly_skewed": is_highly_skewed,
+                "recommendation": (
+                    "PowerTransformer" if is_highly_skewed else "StandardScaler"
+                ),
+            }
+        )
+
+    skew_df = pd.DataFrame(skewness_results)
+
+    # 打印严重偏态的特征
+    highly_skewed = skew_df[skew_df["is_highly_skewed"]]
+    if len(highly_skewed) > 0:
+        print(f"⚠️ 发现 {len(highly_skewed)} 个严重偏态特征（|偏度|≥{threshold}）:")
+        print(highly_skewed[["feature", "skewness", "recommendation"]])
+        print("\n推荐先对这些特征使用PowerTransformer，然后再用StandardScaler")
+    else:
+        print(f"✅ 没有严重偏态特征，可以直接使用StandardScaler")
+
+    return skew_df
+
+
+# 使用示例
+# skew_df = check_skewness(df, threshold=1.0)
+if __name__ == "__main__":
+    df = pd.read_csv("./merged_data/merged_0.csv")
+    df = create_all_features(df)
+    results = comprehensive_scaler_selection(
+        df, skew_threshold=1.0, outlier_threshold=1.5
+    )

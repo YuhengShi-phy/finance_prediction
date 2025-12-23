@@ -40,7 +40,7 @@ def main():
     y_train = None
     y_test = None
 
-    for i in range(3):
+    for i in range(4, 6):
 
         print("-" * 50)
         print(f"Stock Index: {i}")
@@ -56,9 +56,7 @@ def main():
         df_with_features = df_with_features.tail(len(df_with_features) - 51)
         df_with_features = df_with_features.head(len(df_with_features) - 10)
 
-        # print(
-        #     f"Data features: {eval.check_feature_distributions(df_with_features, dp.selected_features)}"
-        # )
+        # print(eval.check_feature_distributions(df_with_features, dp.selected_features))
 
         X_single, y_single = dp.sequentialize_certain_features(
             df_with_features,
