@@ -1,5 +1,71 @@
+from operator import le
 import numpy as np
+from numpy.typing import NDArray
 import pandas as pd
+import tensorflow as tf
+
+
+class FBetaScore(tf.keras.metrics.Metric):
+    def __init__(self, beta=0.5, name="f_beta_score", **kwargs):
+        super(FBetaScore, self).__init__(name=name, **kwargs)
+        self.beta = beta
+        self.true_positives = self.add_weight(name="tp", initializer="zeros")
+        self.false_positives = self.add_weight(name="fp", initializer="zeros")
+        self.false_negatives = self.add_weight(name="fn", initializer="zeros")
+
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        # 将预测转换为类别
+        y_pred_labels = tf.argmax(y_pred, axis=-1)  # 如果是多分类
+        # 或者 y_pred_labels = tf.round(y_pred) 如果是二分类
+
+        y_true = tf.cast(y_true, tf.int32)
+        y_pred_labels = tf.cast(y_pred_labels, tf.int32)
+
+        # 创建掩码
+        true_non_one_mask = tf.not_equal(y_true, 1)
+        pred_non_one_mask = tf.not_equal(y_pred_labels, 1)
+
+        # 计算真正例（true_positives）：预测为非1且正确的样本
+        correct_predictions = tf.equal(y_true, y_pred_labels)
+        true_positives = tf.logical_and(pred_non_one_mask, correct_predictions)
+        true_positives = tf.cast(true_positives, tf.float32)
+
+        # 计算假正例（false_positives）：预测为非1但错误的样本
+        false_positives = tf.logical_and(
+            pred_non_one_mask, tf.logical_not(correct_predictions)
+        )
+        false_positives = tf.cast(false_positives, tf.float32)
+
+        # 计算假负例（false_negatives）：真实为非1但预测为1的样本
+        false_negatives = tf.logical_and(true_non_one_mask, tf.equal(y_pred_labels, 1))
+        false_negatives = tf.cast(false_negatives, tf.float32)
+
+        # 更新状态变量
+        self.true_positives.assign_add(tf.reduce_sum(true_positives))
+        self.false_positives.assign_add(tf.reduce_sum(false_positives))
+        self.false_negatives.assign_add(tf.reduce_sum(false_negatives))
+
+    def result(self):
+        precision = tf.math.divide_no_nan(
+            self.true_positives, self.true_positives + self.false_positives
+        )
+
+        recall = tf.math.divide_no_nan(
+            self.true_positives, self.true_positives + self.false_negatives
+        )
+
+        # 计算F-beta分数
+        numerator = (1 + self.beta**2) * precision * recall
+        denominator = (self.beta**2 * precision) + recall
+
+        f_beta = tf.where(tf.equal(denominator, 0), 0.0, numerator / denominator)
+
+        return f_beta
+
+    def reset_state(self):
+        self.true_positives.assign(0.0)
+        self.false_positives.assign(0.0)
+        self.false_negatives.assign(0.0)
 
 
 def get_label(y, X, time_delay):  # y可为y_test或y_pred，Day为一个数[5,10,20,40,60]
@@ -84,3 +150,20 @@ def check_feature_distributions(df: pd.DataFrame, features: list[str]):
         results.append(stats)
 
     return pd.DataFrame(results)
+
+
+def calculate_pnl_average(df: pd.DataFrame, pred_labels: NDArray, time_delay: int):
+    returns = df[f"return_after_{time_delay}"].values
+    non_one_mask = pred_labels != 1
+    pred_labels = pred_labels - 1
+    # 方法1：使用 np.nansum 忽略 NaN（推荐）
+    selected_returns = returns[(len(returns) - len(pred_labels)) :]
+
+    acc_return = np.nansum(pred_labels * selected_returns)
+    if sum(non_one_mask) > 0:
+        average_return = acc_return / sum(non_one_mask)
+    else:
+        print("Why no 0 or 2? Fuck you sonuvbitch!")
+        average_return = 114514
+
+    return average_return

@@ -1,77 +1,81 @@
+import evaluation as eval
+import numpy as np
 import tensorflow as tf
+from tensorflow import keras
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
     LSTM,
     Dense,
     Dropout,
     Conv1D,
-    Layer,
-    BatchNormalization,
+    LayerNormalization,
+    Concatenate,
+    MultiHeadAttention,
+    Flatten,
+    Bidirectional,
 )
 from tensorflow.keras.regularizers import l2
 from tensorflow.keras import backend as K
 
 
-# Define the Attention layer
-@tf.keras.utils.register_keras_serializable()
-class Attention(Layer):
-    def __init__(self, **kwargs):
-        super(Attention, self).__init__(**kwargs)
+def build_conv_residual_block(input_shape):
+    inputs = keras.Input(input_shape)
+    shortcut = inputs
+    feat_1 = Conv1D(filters=32, kernel_size=3, padding="same", activation="tanh")(
+        inputs
+    )
+    feat_2 = Conv1D(filters=32, kernel_size=5, padding="same", activation="tanh")(
+        inputs
+    )
+    feat_3 = Conv1D(filters=32, kernel_size=7, padding="same", activation="tanh")(
+        inputs
+    )
 
-    def build(self, input_shape):
-        self.W = self.add_weight(
-            name="attention_weight",
-            shape=(input_shape[-1], 1),
-            initializer="random_normal",
-            trainable=True,
-        )
-        self.b = self.add_weight(
-            name="attention_bias",
-            shape=(input_shape[1], 1),
-            initializer="zeros",
-            trainable=True,
-        )
-        super(Attention, self).build(input_shape)
+    outputs = Concatenate(axis=2)([feat_1, feat_2, feat_3, shortcut])
 
-    def call(self, x):
-        e = K.tanh(K.dot(x, self.W) + self.b)
-        e = K.squeeze(e, axis=-1)
-        alpha = K.softmax(e)
-        alpha = K.expand_dims(alpha, axis=-1)
-        context = x * alpha
-        context = K.sum(context, axis=1)
-        return context
+    model = keras.Model(inputs, outputs)
+    return model
+
+
+def build_lstm_residual_block(input_shape):
+    inputs = keras.Input(input_shape)
+
+    shortcut = inputs
+
+    x = Bidirectional(LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)))(
+        inputs
+    )
+    x = Bidirectional(LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01)))(
+        inputs
+    )
+    shortcut_reshaped = Dense(256)(shortcut)
+    x = shortcut_reshaped + x
+    outputs = Dropout(0.3)(x)
+
+    model = keras.Model(inputs, outputs)
+    return model
 
 
 # Returns basic model without compiling
 def build_base_model(input_shape):
-    model = Sequential(
-        [
-            # Conv1D(filters=128, kernel_size=3, padding="same", activation="tanh"),
-            # Dropout(0.3),
-            # Conv1D(filters=128, kernel_size=3, padding="same", activation="tanh"),
-            # Dropout(0.3),
-            LSTM(
-                256,
-                activation="tanh",
-                return_sequences=True,
-                input_shape=input_shape,
-                kernel_regularizer=l2(0.01),
-            ),
-            BatchNormalization(),
-            Dropout(0.3),
-            LSTM(
-                256,
-                activation="tanh",
-                return_sequences=False,
-                kernel_regularizer=l2(0.01),
-            ),
-            BatchNormalization(),
-            Dropout(0.3),
-            # Attention(),
-            # BatchNormalization(),
-        ]
-    )
+    inputs = keras.Input(input_shape)
+    x = build_conv_residual_block(input_shape)(inputs)
+    x = LayerNormalization()(x)
+    x = Dropout(0.3)(x)
+    x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
+    x = LayerNormalization()(x)
+    x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
+    x = LayerNormalization()(x)
+
+    x = LSTM(128, return_sequences=True)(x)
+    attention_output = MultiHeadAttention(num_heads=4, key_dim=128)(x, x)
+    x = LayerNormalization()(x + attention_output)
+    x = Dense(64, activation="relu")(x)
+    x = Dropout(0.3)(x)
+
+    outputs = Flatten()(x)
+
+    model = keras.Model(inputs, outputs)
     return model
 
 
@@ -82,7 +86,7 @@ def build_classification_model(input_shape, num_classes=3):
             build_base_model(input_shape),
             # Dense(256, activation="relu"),
             # Dropout(0.3),
-            Dense(128, activation="tanh", kernel_regularizer=l2(0.01)),
+            Dense(128, activation="relu", kernel_regularizer=l2(0.01)),
             Dropout(0.3),
             Dense(64, activation="relu", kernel_regularizer=l2(0.01)),
             Dropout(0.3),
@@ -90,10 +94,16 @@ def build_classification_model(input_shape, num_classes=3):
         ]
     )
 
+    optimizer = keras.optimizers.Adam(
+        learning_rate=0.0001,
+        beta_1=0.9,
+        beta_2=0.999,
+        clipnorm=1.0,  # 梯度裁剪，防止梯度爆炸
+    )
     model.compile(
-        optimizer="adam",
+        optimizer=optimizer,
         loss="sparse_categorical_crossentropy",
-        metrics=["accuracy"],
+        metrics=[eval.FBetaScore()],
     )
 
     return model

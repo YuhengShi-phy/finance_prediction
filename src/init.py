@@ -65,19 +65,20 @@ feature_columns = [
 
 def main():
     print("-" * 50)
+    sequence_length = 50
+    time_delay = 5
     df_with_features = pd.read_csv("./df_with_features.csv")
-    df_with_features = dp.add_midprice_label(df_with_features, 5)
+    df_with_features[f"return_after_{time_delay}"] = (
+        df_with_features["n_midprice"].shift(-time_delay)
+        - df_with_features["n_midprice"]
+    ) / (1 + df_with_features["n_midprice"])
     df_with_features = df_with_features.tail(len(df_with_features) - 51)
     df_with_features = df_with_features.head(len(df_with_features) - 10)
 
-    sequence_length = 100
-    time_delay = 5
     X, y = dp.sequentialize_certain_features(
         df_with_features, dp.selected_features, f"label_{time_delay}", sequence_length
     )
-    X_train, X_test, y_train, y_test, price_scaler = dp.split_and_scale(
-        X, y, test_size=0.2
-    )
+    X_train, X_test, y_train, y_test, _ = dp.split_and_scale(X, y, test_size=0.2)
     print(f"训练集形状: {X_train.shape}, {y_train.shape}")
     print(f"测试集形状: {X_test.shape}, {y_test.shape}")
 
@@ -105,10 +106,10 @@ def main():
         X_train,
         y_train,
         validation_data=(X_test, y_test),
-        epochs=2,
+        epochs=5,
         batch_size=128,
         verbose=1,
-        class_weight={0: 5, 1: 1, 2: 5},
+        class_weight={0: 4, 1: 1, 2: 3},
     )
 
     # 预测示例
@@ -124,7 +125,9 @@ def main():
     # print(f"The first 20 true labels: {y_test[:20]}")
 
     test_score = eval.calculate_f_beta_multiclass(y_test, y_pred)
+    test_pnl_average = eval.calculate_pnl_average(df_with_features, y_pred, time_delay)
     print(f"The f beta score on test: {test_score}")
+    print(f"The pnl average on test: {test_pnl_average}")
 
     y_train_pred = model.predict(X_train)
     # pt.plot_predict_curve(y_train, y_train_pred)
