@@ -67,22 +67,22 @@ def main():
     print("-" * 50)
     sequence_length = 50
     time_delay = 5
-    df_with_features = pd.read_csv("./df_with_features.csv")
-    df_with_features[f"return_after_{time_delay}"] = (
-        df_with_features["n_midprice"].shift(-time_delay)
-        - df_with_features["n_midprice"]
-    ) / (1 + df_with_features["n_midprice"])
-    df_with_features = df_with_features.tail(len(df_with_features) - 51)
-    df_with_features = df_with_features.head(len(df_with_features) - 10)
+    # df_with_features = pd.read_csv("./df_with_features.csv")
+    # df_with_features[f"return_after_{time_delay}"] = (
+    #     df_with_features["n_midprice"].shift(-time_delay)
+    #     - df_with_features["n_midprice"]
+    # ) / (1 + df_with_features["n_midprice"])
+    # df_with_features = df_with_features.tail(len(df_with_features) - 51)
+    # df_with_features = df_with_features.head(len(df_with_features) - 10)
 
-    X_train = []
-    y_train = []
-    X_test = []
-    y_test = []
+    X_train_list = []
+    y_train_list = []
+    X_test_list = []
+    y_test_list = []
     for i in range(10):
 
-        df_with_features = pd.read_csv("./merge{i}_with_features.csv")
-        df_with_features = dp.add_midprice_label(df_with_features, 5)
+        df_raw = pd.read_csv(f"./merged_data/merged_{i}.csv")
+        df_with_features = dp.create_all_features(df_raw)
         df_with_features = df_with_features.tail(len(df_with_features) - 51)
         df_with_features = df_with_features.head(len(df_with_features) - 10)
 
@@ -94,31 +94,21 @@ def main():
             f"label_{time_delay}",
             sequence_length,
         )
-        X_train_single, X_test_single, y_train_single, y_test_single, price_scaler = (
+        (X_train_single, X_test_single, y_train_single, y_test_single) = (
             dp.split_and_scale(X_single, y_single, test_size=0.2)
         )
-        X_train = contact(X_train, X_train_single)
-        y_train = contact(y_train, y_train_single)
-        X_test = contact(X_test, X_test_single)
-        y_test = contact(y_test, y_test_single)
+        X_train_list.append(X_train_single)
+        X_test_list.append(X_test_single)
+        y_train_list.append(y_train_single)
+        y_test_list.append(y_test_single)
 
+    X_train = np.concatenate(X_train_list, axis=0)
+    X_test = np.concatenate(X_test_list, axis=0)
+    y_train = np.concatenate(y_train_list, axis=0)
+    y_test = np.concatenate(y_test_list, axis=0)
     print(f"训练集形状: {X_train.shape}, {y_train.shape}")
     print(f"测试集形状: {X_test.shape}, {y_test.shape}")
 
-    # print(f"From return: {price_scaler.center_,price_scaler.scale_}")
-    # print(f"训练集形状: {X_train.shape}, {y_train.shape}")
-    # print(f"测试集形状: {X_test.shape}, {y_test.shape}")
-    #
-    # X_train_original = price_scaler.inverse_transform(
-    #     X_train[:, 99, 0:3].reshape(-1, 3)
-    # )
-    # print(f"After Inverse: {price_scaler.center_,price_scaler.scale_}")
-    # print(f"The shape of X_train_original: {X_train_original.shape}")
-    # y_train = eval.get_label(y_train, X_train_original[:, 1], 5)
-    # print(f"The first 20 (maybe) true labels: {y_train[:20]}")
-    # print(f"The first 20 true labels: {df_with_features.iloc[100:120]['label_5']}")
-
-    # X_train, y_train = apply_undersampling(X_train, y_train)
     # 构建模型
     input_shape = (X_train.shape[1], X_train.shape[2])
     model = md.build_classification_model(input_shape)
@@ -148,9 +138,9 @@ def main():
     # print(f"The first 20 true labels: {y_test[:20]}")
 
     test_score = eval.calculate_f_beta_multiclass(y_test, y_pred)
-    test_pnl_average = eval.calculate_pnl_average(df_with_features, y_pred, time_delay)
+    # test_pnl_average = eval.calculate_pnl_average(df_with_features, y_pred, time_delay)
     print(f"The f beta score on test: {test_score}")
-    print(f"The pnl average on test: {test_pnl_average}")
+    # print(f"The pnl average on test: {test_pnl_average}")
 
     y_train_pred = model.predict(X_train)
     # pt.plot_predict_curve(y_train, y_train_pred)
