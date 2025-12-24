@@ -2,10 +2,19 @@ from json import load
 import os
 import joblib
 from typing import List
-from sklearn import preprocessing
-from sklearn.preprocessing import RobustScaler, MinMaxScaler, FunctionTransformer
-from sklearn.pipeline import Pipeline
-
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import (
+    LSTM,
+    Dense,
+    Dropout,
+    Conv1D,
+    LayerNormalization,
+    Concatenate,
+    MultiHeadAttention,
+    Flatten,
+    Bidirectional,
+)
+from tensorflow.keras.regularizers import l2
 from tensorflow import keras
 import pandas as pd
 import numpy as np
@@ -44,9 +53,12 @@ class Predictor:
             "time_sin",  # 时间正弦编码
             "sym",
         ]
+        self.input_shape = (50, 21)
+        self.num_classes = 3
         self.balance_scaler = joblib.load("./balance.joblib")
         self.volume_scaler = joblib.load("./volume.joblib")
-        self.load_model("./lstm_price_prediction_model.keras")
+        self._build_model_architecture()
+        self._load_weights("./model.weights.h5")
 
     def predict(self, data: List[pd.DataFrame]) -> List[List[int]]:
         results = []
@@ -57,8 +69,98 @@ class Predictor:
 
         return results
 
-    def load_model(self, model_path: str):
-        self.model = keras.models.load_model(model_path)
+    def _build_model_architecture(self):
+        """构建模型架构（与训练时相同）"""
+
+        # 构建基础模型
+        def build_conv_residual_block(input_shape):
+            inputs = keras.Input(input_shape)
+            shortcut = inputs
+            feat_1 = Conv1D(
+                filters=32, kernel_size=3, padding="same", activation="tanh"
+            )(inputs)
+            feat_2 = Conv1D(
+                filters=32, kernel_size=5, padding="same", activation="tanh"
+            )(inputs)
+            feat_3 = Conv1D(
+                filters=32, kernel_size=7, padding="same", activation="tanh"
+            )(inputs)
+            outputs = Concatenate(axis=2)([feat_1, feat_2, feat_3, shortcut])
+            return keras.Model(inputs, outputs)
+
+        def build_lstm_residual_block(input_shape):
+            inputs = keras.Input(input_shape)
+            shortcut = inputs
+            x = Bidirectional(
+                LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))
+            )(inputs)
+            x = Bidirectional(
+                LSTM(128, return_sequences=True, kernel_regularizer=l2(0.01))
+            )(inputs)
+            shortcut_reshaped = Dense(256)(shortcut)
+            x = shortcut_reshaped + x
+            outputs = Dropout(0.3)(x)
+            return keras.Model(inputs, outputs)
+
+        def build_base_model(input_shape):
+            inputs = keras.Input(input_shape)
+            x = build_conv_residual_block(input_shape)(inputs)
+            x = LayerNormalization()(x)
+            x = Dropout(0.3)(x)
+            x = build_conv_residual_block(input_shape)(inputs)
+            x = LayerNormalization()(x)
+            x = Dropout(0.3)(x)
+
+            x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
+            x = LayerNormalization()(x)
+            # x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
+            # x = LayerNormalization()(x)
+
+            x = LSTM(128, return_sequences=True)(x)
+            short_cut = x
+            attention_output_1 = MultiHeadAttention(num_heads=4, key_dim=128)(x, x)
+            x = LayerNormalization()(x + attention_output_1)
+            # attention_output_2 = MultiHeadAttention(num_heads=4, key_dim=128)(x, x)
+            # x = LayerNormalization()(x + attention_output_2)
+
+            x = Dense(256, activation="relu", kernel_regularizer=l2(0.01))(x)
+            x = Dense(128, activation="relu", kernel_regularizer=l2(0.01))(x)
+            x = short_cut + x
+            x = Dropout(0.3)(x)
+
+            outputs = Flatten()(x)
+
+            model = keras.Model(inputs, outputs)
+            return model
+
+        # 构建完整模型
+        inputs = keras.Input(shape=self.input_shape)
+        x = build_base_model(self.input_shape)(inputs)
+        x = Dense(256, activation="relu", kernel_regularizer=l2(0.01))(x)
+        x = Dropout(0.3)(x)
+        x = Dense(128, activation="relu", kernel_regularizer=l2(0.01))(x)
+        x = Dropout(0.3)(x)
+        outputs = Dense(self.num_classes, activation="softmax")(x)
+
+        self.model = keras.Model(inputs=inputs, outputs=outputs)
+
+        # 简单编译（只是为了能预测）
+        self.model.compile(
+            optimizer="adam",
+            loss="sparse_categorical_crossentropy",
+            metrics=["accuracy"],
+        )
+
+    def _load_weights(self, weights_path):
+        """加载权重"""
+        try:
+            self.model.load_weights(weights_path)
+            print(f"权重加载成功: {weights_path}")
+            return True
+        except Exception as e:
+            print(f"权重加载失败: {e}")
+            print("使用随机初始化权重")
+            return False
 
     def create_all_features(self, df: pd.DataFrame):
         """创建所有特征"""
