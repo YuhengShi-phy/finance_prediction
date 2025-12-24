@@ -48,10 +48,10 @@ def main():
 
         # Process one stock at a time to reduce memory footprint
         df_raw = pd.read_csv(f"./merged_data/merged_{i}.csv")
-        print_memory_usage(f"After loading stock {i}")
+        # print_memory_usage(f"After loading stock {i}")
 
         df_with_features = dp.create_all_features(df_raw)
-        print_memory_usage(f"After feature engineering stock {i}")
+        # print_memory_usage(f"After feature engineering stock {i}")
 
         df_with_features = df_with_features.tail(len(df_with_features) - 51)
         df_with_features = df_with_features.head(len(df_with_features) - 10)
@@ -64,12 +64,12 @@ def main():
             f"label_{time_delay}",
             sequence_length,
         )
-        print_memory_usage(f"After sequentializing stock {i}")
+        # print_memory_usage(f"After sequentializing stock {i}")
 
         (X_train_single, X_test_single, y_train_single, y_test_single) = (
             train_test_split(X_single, y_single, test_size=0.2, shuffle=False)
         )
-        print_memory_usage(f"After splitting data of stock {i}")
+        # print_memory_usage(f"After splitting data of stock {i}")
 
         # Incremental concatenation
         if X_train is None:
@@ -84,6 +84,7 @@ def main():
             y_test = np.concatenate([y_test, y_test_single], axis=0)
 
     X_train, X_test = dp.scale(X_train, X_test)
+    print_memory_usage("Final")
     print(f"训练集形状: {X_train.shape}, {y_train.shape}")
     print(f"测试集形状: {X_test.shape}, {y_test.shape}")
 
