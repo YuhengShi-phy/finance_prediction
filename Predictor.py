@@ -58,7 +58,7 @@ class Predictor:
         return results
 
     def load_model(self, model_path: str):
-        self.model = keras.saving.load_model(model_path)
+        self.model = keras.models.load_model(model_path)
 
     def create_all_features(self, df: pd.DataFrame):
         """创建所有特征"""

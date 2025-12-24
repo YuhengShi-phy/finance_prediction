@@ -130,9 +130,9 @@ def main():
     print(f"The f beta score on test: {test_score}")
     # print(f"The pnl average on test: {test_pnl_average}")
 
-    y_train_pred = model.predict(X_train)
+    # y_train_pred = model.predict(X_train)
     # pt.plot_predict_curve(y_train, y_train_pred)
-    y_train_pred = np.argmax(y_train_pred, axis=1)
+    # y_train_pred = np.argmax(y_train_pred, axis=1)
     # X_train_original = price_scaler.inverse_transform(
     #     X_train[:, 99, 0:3].reshape(-1, 3)
     # )
@@ -146,8 +146,8 @@ def main():
     # pt.draw_loss_curve(history)
     # pt.draw_accuracy_curve(history)
     # 保存模型
-    model.save("lstm_price_prediction_model.keras")
-    print("模型已保存为 'lstm_price_prediction_model.keras'")
+    model.save_weights("model_weights.keras")
+    print("模型已保存为 'model_weights.keras'")
 
 
 if __name__ == "__main__":
