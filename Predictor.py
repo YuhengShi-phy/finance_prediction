@@ -56,19 +56,19 @@ class Predictor:
         self.input_shape = (50, 21)
         self.num_classes = 3
         self._build_model_architecture()
-        # self.balance_scaler = joblib.load(
-        #     "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/balance.joblib"
-        # )
-        # self.volume_scaler = joblib.load(
-        #     "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/volume.joblib"
-        # )
-        # self._load_weights(
-        #     "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/model.weights.h5"
-        # )
+        self.balance_scaler = joblib.load(
+            "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/balance.joblib"
+        )
+        self.volume_scaler = joblib.load(
+            "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/volume.joblib"
+        )
+        self._load_weights(
+            "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/model.weights.h5"
+        )
         # Used when testing
-        self.balance_scaler = joblib.load("./balance.joblib")
-        self.volume_scaler = joblib.load("./volume.joblib")
-        self._load_weights("./model.weights.h5")
+        # self.balance_scaler = joblib.load("./balance.joblib")
+        # self.volume_scaler = joblib.load("./volume.joblib")
+        # self._load_weights("./model.weights.h5")
 
     def predict(self, data: List[pd.DataFrame]) -> List[List[int]]:
         results = []
@@ -76,7 +76,7 @@ class Predictor:
             X = self.preprocess(df)
             y = self.model.predict(X)
             y = np.argmax(y)
-            results.append(y)
+            results.append([y])
 
         return results
 
@@ -301,5 +301,5 @@ def test():
     pass
 
 
-if __name__ == "__main__":
-    test()
+# if __name__ == "__main__":
+#     test()

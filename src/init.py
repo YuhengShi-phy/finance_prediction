@@ -1,4 +1,3 @@
-from sklearn.model_selection import train_test_split
 import plotter as pt
 import model as md
 import data_preprocess as dp
@@ -40,7 +39,7 @@ def main():
     y_train = None
     y_test = None
 
-    for i in range(10):
+    for i in range(9):
 
         print("-" * 50)
         print(f"Stock Index: {i}")
@@ -72,22 +71,36 @@ def main():
         )
         # print_memory_usage(f"After sequentializing stock {i}")
 
-        (X_train_single, X_test_single, y_train_single, y_test_single) = dp.split(
-            X_single, y_single, test_size=0.2
-        )
+        # (X_train_single, X_test_single, y_train_single, y_test_single) = dp.split(
+        #     X_single, y_single, test_size=0.2
+        # )
+        X_train_single = X_single
+        y_train_single = y_single
         # print_memory_usage(f"After splitting data of stock {i}")
 
         # Incremental concatenation
         if X_train is None:
             X_train = X_train_single
-            X_test = X_test_single
+            # X_test = X_test_single
             y_train = y_train_single
-            y_test = y_test_single
+            # y_test = y_test_single
         else:
             X_train = np.concatenate([X_train, X_train_single], axis=0)
-            X_test = np.concatenate([X_test, X_test_single], axis=0)
+            # X_test = np.concatenate([X_test, X_test_single], axis=0)
             y_train = np.concatenate([y_train, y_train_single], axis=0)
-            y_test = np.concatenate([y_test, y_test_single], axis=0)
+            # y_test = np.concatenate([y_test, y_test_single], axis=0)
+
+    df_raw_9 = pd.read_csv("./merged_data/merged_9.csv")
+    df_with_features_9 = dp.create_all_features(df_raw_9)
+    df_with_features_9 = (
+        df_with_features_9["n_midprice"].shift(-time_delay)
+        - df_with_features_9["n_midprice"]
+    ) / df_with_features_9["n_midprice"]
+    df_with_features_9 = df_with_features_9.tail(len(df_with_features) - 51)
+    df_with_features_9 = df_with_features_9.head(len(df_with_features) - 10)
+    X_test = dp.sequentialize_certain_features(
+        df_with_features_9, dp.selected_features, f"label_{time_delay}", sequence_length
+    )
 
     X_train, X_test = dp.scale(X_train, X_test)
     print_memory_usage("Final")
@@ -126,9 +139,11 @@ def main():
     # print(f"The first 20 true labels: {y_test[:20]}")
 
     test_score = eval.calculate_f_beta_multiclass(y_test, y_pred)
-    # test_pnl_average = eval.calculate_pnl_average(df_with_features, y_pred, time_delay)
+    test_pnl_average = eval.calculate_pnl_average(
+        df_with_features_9, y_pred, time_delay
+    )
     print(f"The f beta score on test: {test_score}")
-    # print(f"The pnl average on test: {test_pnl_average}")
+    print(f"The pnl average on test: {test_pnl_average}")
 
     # y_train_pred = model.predict(X_train)
     # pt.plot_predict_curve(y_train, y_train_pred)
