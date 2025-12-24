@@ -2,8 +2,6 @@ from numpy.typing import NDArray
 from numpy.lib.stride_tricks import as_strided
 from sklearn.preprocessing import RobustScaler, MinMaxScaler
 from sklearn.base import TransformerMixin, BaseEstimator
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import train_test_split
 import joblib
 import pandas as pd
 import numpy as np
@@ -139,7 +137,12 @@ def create_all_features(df: pd.DataFrame):
     df["parkinson_vol_20"] = np.sqrt(
         (1 / (4 * 20 * np.log(2))) * high_low_ratio.rolling(window=20).sum()
     )
-    # df["n_midprice"] = df["n_midprice"] - 1
+    df["amount_delta"] = df["amount_delta"].apply(
+        lambda x: np.sign(x) * np.log1p(np.abs(x))
+    )
+    df["volume_momentum"] = df["volume_momentum"].apply(
+        lambda x: np.sign(x) * np.log1p(np.abs(x))
+    )
 
     print(f"特征工程完成")
 
@@ -172,7 +175,6 @@ def sequentialize_certain_features(
     labels_np = df[label_column].values
     n_samples, n_features = features_np.shape
     output_shape = (n_samples - seq_length + 1, seq_length, n_features)
-    X, y = [], []
     # 计算strides
     item_size = features_np.itemsize
     strides = (
@@ -243,12 +245,7 @@ def scale(X_train: NDArray, X_test: NDArray):
 
     balance_scaler = MinMaxScaler(feature_range=(-1, 1))
 
-    volume_scaler = Pipeline(
-        [
-            ("sign_log", SignLogTransformer()),
-            ("scale", RobustScaler()),
-        ]
-    )
+    volume_scaler = RobustScaler()
     X_train_scaled = np.concatenate(
         [
             scale_train(balance_scaler, X_train[:, :, 0:17]),
