@@ -55,22 +55,27 @@ class Predictor:
         ]
         self.input_shape = (50, 21)
         self.num_classes = 3
-        self.balance_scaler = joblib.load(
-            "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/balance.joblib"
-        )
-        self.volume_scaler = joblib.load(
-            "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/volume.joblib"
-        )
         self._build_model_architecture()
-        self._load_weights(
-            "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/model.weights.h5"
-        )
+        # self.balance_scaler = joblib.load(
+        #     "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/balance.joblib"
+        # )
+        # self.volume_scaler = joblib.load(
+        #     "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/volume.joblib"
+        # )
+        # self._load_weights(
+        #     "/code/web/evaluation/223/30a3911e5b7119eb3024ee3d3b88f58d/mmpc/model.weights.h5"
+        # )
+        # Used when testing
+        self.balance_scaler = joblib.load("./balance.joblib")
+        self.volume_scaler = joblib.load("./volume.joblib")
+        self._load_weights("./model.weights.h5")
 
     def predict(self, data: List[pd.DataFrame]) -> List[List[int]]:
         results = []
         for df in data:
             X = self.preprocess(df)
             y = self.model.predict(X)
+            y = np.argmax(y)
             results.append(y)
 
         return results
@@ -185,7 +190,7 @@ class Predictor:
         df["n_ask4"] = df["n_ask4"] + 1
         df["n_ask5"] = df["n_ask5"] + 1
         time_series = pd.to_datetime(df["time"], format="%H:%M:%S")
-
+        print(isinstance(time_series, pd.Series))
         df["time_sin"] = np.sin(
             2
             * np.pi
@@ -276,15 +281,24 @@ class Predictor:
     def preprocess(self, df: pd.DataFrame):
         df = self.create_all_features(df)
         X = df[self.selected_features].values
-        X = X.reshape(1, X.shape[0], X.shape[1])
-        X[:, :, 0:17] = self.balance_scaler.transform(X[:, :, 0:17])
-        X[:, :, 17:19] = self.volume_scaler.transform(X[:, :, 17:19])
+        X[:, 0:17] = self.balance_scaler.transform(X[:, 0:17])
+        X[:, 17:19] = self.volume_scaler.transform(X[:, 17:19])
 
+        X = X.reshape(1, X.shape[0], X.shape[1])
+        X = X[:, 50:, :]
         return X
 
 
 def test():
     pred = Predictor()
+    df = pd.read_csv("./merged_data/merged_0.csv")
+    data = []
+    for i in range(5):
+        data.append(df.iloc[i : 100 + i])
+
+    result = pred.predict(data)
+    print(f"{result}")
+    pass
 
 
 if __name__ == "__main__":

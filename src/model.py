@@ -61,7 +61,7 @@ def build_base_model(input_shape):
     inputs = keras.Input(input_shape)
     x = build_conv_residual_block(input_shape)(inputs)
     x = LayerNormalization()(x)
-    x = Dropout(0.3)(x)
+    # x = Dropout(0.3)(x)
     x = build_conv_residual_block(input_shape)(inputs)
     x = LayerNormalization()(x)
     x = Dropout(0.3)(x)
@@ -95,9 +95,9 @@ def build_classification_model(input_shape, num_classes=3):
         [
             build_base_model(input_shape),
             Dense(256, activation="relu", kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
+            # Dropout(0.3),
             Dense(128, activation="relu", kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
+            # Dropout(0.3),
             Dense(num_classes, activation="softmax"),  # 3个类别：0,1,2
         ]
     )
