@@ -34,7 +34,7 @@ selected_features = [
     "volume_momentum",  # 成交量动量
     # 7. 时间特征（1个）
     "time_sin",  # 时间正弦编码
-    "sym",
+    "time_cos",
 ]
 
 
@@ -66,7 +66,16 @@ def create_all_features(df: pd.DataFrame):
         )
         / 86400
     )
-
+    df["time_cos"] = np.cos(
+        2
+        * np.pi
+        * (
+            time_series.dt.hour * 3600
+            + time_series.dt.minute * 60
+            + time_series.dt.second
+        )
+        / 86400
+    )
     df["bid_ask_spread"] = df["n_ask1"] - df["n_bid1"]
 
     df["bid_depth"] = sum([df[f"n_bsize{i}"] for i in range(1, 6)])
