@@ -20,40 +20,45 @@ import pandas as pd
 import numpy as np
 
 
+def log_transform(df: pd.DataFrame, features):
+    df[features] = df[features].apply(lambda x: np.sign(x) * np.log1p(np.abs(x)))
+    return df
+
+
 class Predictor:
     def __init__(self):
         self.selected_features = [
-            # 1. 核心价格特征（2个）
+            # features already balanced, using MinMaxScaler:
             "n_close",  # 标准化后的收盘价
             "n_midprice",  # 标准化后的中间价
-            # 2. 市场微观结构（5个）
+            "n_bid5",
+            "n_ask5",
             "bid_ask_spread",  # 买卖价差
             "size_imbalance_1",  # 一档买卖量不平衡
             "microprice",  # 微观价格（考虑深度的加权价格）
             "size_imbalance_5",
-            # "order_flow_imbalance",  # 订单流不平衡
             "total_depth",  # 总市场深度
-            # 3. 动量与趋势（4个）
             "midprice_momentum_20",  # 20期动量
             "macd",  # MACD线
             "ma_cross_5_20",  # 移动平均线交叉信号
             "price_acceleration",  # 价格加速度
-            # 4. 波动率特征（3个）
             "volatility_20",  # 20期波动率
             "bollinger_width",  # 布林带宽度
             "parkinson_vol_20",  # Parkinson波动率（更准确的高低价估计）
-            # 5. 技术指标（3个）
             "rsi_14",  # 14期RSI
             "stochastic_k",  # 随机指标K值
             "bias_20",  # 20期乖离率
-            # 6. 成交量与流动性（2个）
+            # features need to transform using log1p
             "amount_delta",  # 成交额变化
             "volume_momentum",  # 成交量动量
-            # 7. 时间特征（1个）
+            "n_asize5",
+            "n_bsize5",
+            # features that don't need a scaler
             "time_sin",  # 时间正弦编码
-            "sym",
+            "time_cos",  # 时间余弦编码
         ]
-        self.input_shape = (50, 21)
+
+        self.input_shape = (50, 25)
         self.num_classes = 3
         self._build_model_architecture()
         self.balance_scaler = joblib.load(
@@ -116,24 +121,25 @@ class Predictor:
             x = build_conv_residual_block(input_shape)(inputs)
             x = LayerNormalization()(x)
             x = Dropout(0.3)(x)
-            x = build_conv_residual_block(input_shape)(inputs)
-            x = LayerNormalization()(x)
-            x = Dropout(0.3)(x)
+            # x = build_conv_residual_block(input_shape)(inputs)
+            # x = LayerNormalization()(x)
+            # x = Dropout(0.3)(x)
 
             x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
             x = LayerNormalization()(x)
             # x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
             # x = LayerNormalization()(x)
 
-            x = LSTM(128, return_sequences=True)(x)
+            x = LSTM(256, return_sequences=True)(x)
             short_cut = x
-            attention_output_1 = MultiHeadAttention(num_heads=4, key_dim=128)(x, x)
+            attention_output_1 = MultiHeadAttention(num_heads=4, key_dim=256)(x, x)
             x = LayerNormalization()(x + attention_output_1)
-            # attention_output_2 = MultiHeadAttention(num_heads=4, key_dim=128)(x, x)
-            # x = LayerNormalization()(x + attention_output_2)
+            attention_output_2 = MultiHeadAttention(num_heads=4, key_dim=256)(x, x)
+            x = LayerNormalization()(x + attention_output_2)
 
             x = Dense(256, activation="relu", kernel_regularizer=l2(0.01))(x)
             x = Dense(128, activation="relu", kernel_regularizer=l2(0.01))(x)
+            short_cut = Dense(128)(short_cut)
             x = short_cut + x
             x = Dropout(0.3)(x)
 
@@ -199,7 +205,16 @@ class Predictor:
             )
             / 86400
         )
-
+        df["time_cos"] = np.cos(
+            2
+            * np.pi
+            * (
+                time_series.dt.hour * 3600
+                + time_series.dt.minute * 60
+                + time_series.dt.second
+            )
+            / 86400
+        )
         df["bid_ask_spread"] = df["n_ask1"] - df["n_bid1"]
 
         df["bid_depth"] = sum([df[f"n_bsize{i}"] for i in range(1, 6)])
@@ -272,6 +287,7 @@ class Predictor:
             (1 / (4 * 20 * np.log(2))) * high_low_ratio.rolling(window=20).sum()
         )
 
+        df = log_transform(df, self.selected_features[19:21])
         print(f"特征工程完成")
 
         return df
@@ -279,8 +295,8 @@ class Predictor:
     def preprocess(self, df: pd.DataFrame):
         df = self.create_all_features(df)
         X = df[self.selected_features].values
-        X[:, 0:17] = self.balance_scaler.transform(X[:, 0:17])
-        X[:, 17:19] = self.volume_scaler.transform(X[:, 17:19])
+        X[:, 0:19] = self.balance_scaler.transform(X[:, 0:19])
+        X[:, 19:21] = self.volume_scaler.transform(X[:, 19:21])
 
         X = X.reshape(1, X.shape[0], X.shape[1])
         X = X[:, 50:, :]
@@ -301,4 +317,4 @@ def test():
     pass
 
 
-test()
+# test()
