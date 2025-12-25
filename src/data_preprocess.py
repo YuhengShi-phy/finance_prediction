@@ -6,36 +6,40 @@ import pandas as pd
 import numpy as np
 
 selected_features = [
-    # 1. 核心价格特征（2个）
+    # features already balanced, using MinMaxScaler:
     "n_close",  # 标准化后的收盘价
     "n_midprice",  # 标准化后的中间价
-    # 2. 市场微观结构（5个）
+    "n_bid5",
+    "n_ask5",
     "bid_ask_spread",  # 买卖价差
     "size_imbalance_1",  # 一档买卖量不平衡
     "microprice",  # 微观价格（考虑深度的加权价格）
     "size_imbalance_5",
-    # "order_flow_imbalance",  # 订单流不平衡
     "total_depth",  # 总市场深度
-    # 3. 动量与趋势（4个）
     "midprice_momentum_20",  # 20期动量
     "macd",  # MACD线
     "ma_cross_5_20",  # 移动平均线交叉信号
     "price_acceleration",  # 价格加速度
-    # 4. 波动率特征（3个）
     "volatility_20",  # 20期波动率
     "bollinger_width",  # 布林带宽度
     "parkinson_vol_20",  # Parkinson波动率（更准确的高低价估计）
-    # 5. 技术指标（3个）
     "rsi_14",  # 14期RSI
     "stochastic_k",  # 随机指标K值
     "bias_20",  # 20期乖离率
-    # 6. 成交量与流动性（2个）
+    # features need to transform using log1p
     "amount_delta",  # 成交额变化
     "volume_momentum",  # 成交量动量
-    # 7. 时间特征（1个）
+    "n_asize5",
+    "n_bsize5",
+    # features that don't need a scaler
     "time_sin",  # 时间正弦编码
-    "time_cos",
+    "time_cos",  # 时间余弦编码
 ]
+
+
+def log_transform(df: pd.DataFrame, features):
+    df[features] = df[features].apply(lambda x: np.sign(x) * np.log1p(np.abs(x)))
+    return df
 
 
 def create_all_features(df: pd.DataFrame):
@@ -145,12 +149,7 @@ def create_all_features(df: pd.DataFrame):
     df["parkinson_vol_20"] = np.sqrt(
         (1 / (4 * 20 * np.log(2))) * high_low_ratio.rolling(window=20).sum()
     )
-    df["amount_delta"] = df["amount_delta"].apply(
-        lambda x: np.sign(x) * np.log1p(np.abs(x))
-    )
-    df["volume_momentum"] = df["volume_momentum"].apply(
-        lambda x: np.sign(x) * np.log1p(np.abs(x))
-    )
+    df = log_transform(df, selected_features[19:21])
 
     print(f"特征工程完成")
 
@@ -238,18 +237,18 @@ def scale(X_train: NDArray, X_test: NDArray):
     volume_scaler = RobustScaler()
     X_train_scaled = np.concatenate(
         [
-            scale_train(balance_scaler, X_train[:, :, 0:17]),
-            scale_train(volume_scaler, X_train[:, :, 17:19]),
-            X_train[:, :, 19:],
+            scale_train(balance_scaler, X_train[:, :, 0:19]),
+            scale_train(volume_scaler, X_train[:, :, 19:21]),
+            X_train[:, :, 21:],
         ],
         axis=2,
     )
     # print(f"After Train Scaling: {price_scaler.center_,price_scaler.scale_}")
     X_test_scaled = np.concatenate(
         [
-            scale_test(balance_scaler, X_test[:, :, 0:17]),
-            scale_test(volume_scaler, X_test[:, :, 17:19]),
-            X_test[:, :, 19:],
+            scale_test(balance_scaler, X_test[:, :, 0:19]),
+            scale_test(volume_scaler, X_test[:, :, 19:21]),
+            X_test[:, :, 21:],
         ],
         axis=2,
     )

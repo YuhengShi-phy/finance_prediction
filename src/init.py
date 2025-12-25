@@ -90,6 +90,8 @@ def main():
             y_train = np.concatenate([y_train, y_train_single], axis=0)
             # y_test = np.concatenate([y_test, y_test_single], axis=0)
 
+    print("=" * 100)
+
     df_raw_9 = pd.read_csv("./merged_data/merged_9.csv")
     df_with_features_9 = dp.create_all_features(df_raw_9)
     df_with_features_9[f"return_after_{time_delay}"] = (
@@ -101,6 +103,7 @@ def main():
     X_test, y_test = dp.sequentialize_certain_features(
         df_with_features_9, dp.selected_features, f"label_{time_delay}", sequence_length
     )
+    print("-" * 50)
 
     X_train, X_test = dp.scale(X_train, X_test)
     print_memory_usage("Final")
