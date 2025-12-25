@@ -155,14 +155,29 @@ def check_feature_distributions(df: pd.DataFrame, features: list[str]):
 # converts the one-hot coding to labels, with threshold
 # shape of y: (n_samples, 3)
 def one_hot_to_label(y: NDArray, threshold: float):
-    y0 = y[:, 0]
-    y2 = y[:, 2]
+    y0, y1, y2 = y[:, 0], y[:, 1], y[:, 2]
     # 创建条件数组
     cond1 = y0 - y2 > threshold  # 取0的条件
     cond2 = y2 - y0 > threshold  # 取2的条件
+    y1_is_max = (y1 >= y0) & (y1 >= y2)
+
+    # 初始化结果数组，默认值为1
+    result = np.ones(y.shape[0], dtype=int)
+
+    # 对于y[1]不是最大值的情况
+    mask = ~y1_is_max
+    y0_masked = y0[mask]
+    y2_masked = y2[mask]
+
+    # 应用条件
+    cond1 = y0_masked - y2_masked > threshold  # 取0的条件
+    cond2 = y2_masked - y0_masked > threshold  # 取2的条件
 
     # 使用np.select进行条件选择
-    return np.select([cond1, cond2], [0, 2], default=1)
+    subset_result = np.select([cond1, cond2], [0, 2], default=1)
+    result[mask] = subset_result
+
+    return result
 
 
 def calculate_pnl_average(df: pd.DataFrame, pred_labels: NDArray, time_delay: int):

@@ -131,7 +131,7 @@ def main():
 
     # 预测示例
     y_pred = model.predict(X_test)
-    y_pred_custom = eval.one_hot_to_label(y_pred, 0.008)
+    y_pred_custom = eval.one_hot_to_label(y_pred, 0.01)
     # pt.plot_predict_curve(y_test, y_pred)
     y_pred = np.argmax(y_pred, axis=1)
 
