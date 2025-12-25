@@ -78,14 +78,14 @@ def main():
             f"label_{time_delay}",
             sequence_length,
         )
-        y_single = eval.label_to_double_one_hot(y_single)
+        y_single_code = eval.label_to_double_one_hot(y_single)
         # print_memory_usage(f"After sequentializing stock {i}")
 
         # (X_train_single, X_test_single, y_train_single, y_test_single) = dp.split(
         #     X_single, y_single, test_size=0.2
         # )
         X_train_single = X_single
-        y_train_single = y_single
+        y_train_single = y_single_code
         # print_memory_usage(f"After splitting data of stock {i}")
 
         # Incremental concatenation
@@ -117,7 +117,7 @@ def main():
         f"label_{time_delay}",
         sequence_length,
     )
-    y_test = eval.label_to_double_one_hot(y_test)
+    y_test_code = eval.label_to_double_one_hot(y_test)
     print("-" * 50)
 
     X_train, X_test = dp.scale(X_train, X_test)
@@ -137,7 +137,7 @@ def main():
     history = model.fit(
         X_train,
         y_train,
-        validation_data=(X_test, y_test),
+        validation_data=(X_test, y_test_code),
         epochs=5,
         batch_size=1024,
         verbose=1,
@@ -149,6 +149,7 @@ def main():
     # y_pred_custom = eval.triple_one_hot_to_label(y_pred, 0.01)
     # pt.plot_predict_curve(y_test, y_pred)
     y_pred = eval.double_one_hot_to_label(y_pred, threshold=0.01)
+    print(y_pred.shape)
 
     # X_test_original = price_scaler.inverse_transform(X_test[:, 99, 0:3].reshape(-1, 3))
 
