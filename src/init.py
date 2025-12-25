@@ -92,7 +92,7 @@ def main():
 
     df_raw_9 = pd.read_csv("./merged_data/merged_9.csv")
     df_with_features_9 = dp.create_all_features(df_raw_9)
-    df_with_features_9 = (
+    df_with_features_9[f"return_after_{time_delay}"] = (
         df_with_features_9["n_midprice"].shift(-time_delay)
         - df_with_features_9["n_midprice"]
     ) / df_with_features_9["n_midprice"]
