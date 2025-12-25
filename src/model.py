@@ -80,6 +80,7 @@ def build_base_model(input_shape):
 
     x = Dense(256, activation="relu", kernel_regularizer=l2(0.01))(x)
     x = Dense(128, activation="relu", kernel_regularizer=l2(0.01))(x)
+    short_cut = Dense(128)(short_cut)
     x = short_cut + x
     x = Dropout(0.3)(x)
 
