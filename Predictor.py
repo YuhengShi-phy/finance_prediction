@@ -2,6 +2,7 @@ from json import load
 import os
 import joblib
 from typing import List
+from numpy.typing import NDArray
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import (
     LSTM,
@@ -23,6 +24,18 @@ import numpy as np
 def log_transform(df: pd.DataFrame, features):
     df[features] = df[features].apply(lambda x: np.sign(x) * np.log1p(np.abs(x)))
     return df
+
+
+def double_one_hot_to_label(y: NDArray, threshold=0.001):
+    y0 = y[:, 0]
+    y1 = y[:, 1]
+
+    # 创建条件数组
+    cond1 = y0 - y1 > threshold  # 取0的条件
+    cond2 = y1 - y0 > threshold  # 取2的条件
+
+    # 使用np.select进行条件选择
+    return np.select([cond1, cond2], [0, 2], default=1)
 
 
 class Predictor:
@@ -58,8 +71,8 @@ class Predictor:
             "time_cos",  # 时间余弦编码
         ]
 
-        self.input_shape = (50, 25)
-        self.num_classes = 3
+        self.input_shape = (80, 25)
+        self.num_classes = 2
         self._build_model_architecture()
         self.balance_scaler = joblib.load(
             os.path.join(os.path.dirname(__file__), "balance.joblib")
@@ -67,7 +80,6 @@ class Predictor:
         self.volume_scaler = joblib.load(
             os.path.join(os.path.dirname(__file__), "volume.joblib")
         )
-        self._load_weights(os.path.join(os.path.dirname(__file__), "model.weights.h5"))
         # Used when testing
         # self.balance_scaler = joblib.load("./balance.joblib")
         # self.volume_scaler = joblib.load("./volume.joblib")
@@ -80,9 +92,12 @@ class Predictor:
             pred_labels = []
             for td in [5, 10, 20, 40, 60]:
                 self._load_weights(
-                    os.path.join(os.path.dirname(__file__), f"model_{td}.weights.h5")
+                    os.path.join(
+                        os.path.dirname(__file__), f"onehot_model_{td}.weights.h5"
+                    )
                 )
                 y = self.model.predict(X)
+                y = double_one_hot_to_label(y, threshold=0.45)
                 pred_labels.append(y)
 
             results.append(pred_labels)
@@ -131,7 +146,7 @@ class Predictor:
             # x = LayerNormalization()(x)
             # x = Dropout(0.3)(x)
 
-            x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
+            x = build_lstm_residual_block((x.shape[1], x.shape[2]), units=128)(x)
             x = LayerNormalization()(x)
             # x = build_lstm_residual_block((x.shape[1], x.shape[2]))(x)
             # x = LayerNormalization()(x)
@@ -167,8 +182,7 @@ class Predictor:
 
         self.model.compile(
             optimizer="adam",
-            loss="sparse_categorical_crossentropy",
-            metrics=["accuracy"],
+            loss="mse",
         )
 
     def _load_weights(self, weights_path):
@@ -255,7 +269,7 @@ class Predictor:
         df["ma_cross_5_20"] = df["ma_5"] - df["ma_20"]
         df["bias_20"] = (df["n_midprice"] - df["ma_20"]) / df["ma_20"] * 100
 
-        rolling_window = 50
+        rolling_window = 20
         df["midprice_ma"] = df["n_midprice"].rolling(window=rolling_window).mean()
         df["midprice_std"] = df["n_midprice"].rolling(window=rolling_window).std()
         df["bollinger_upper"] = df["midprice_ma"] + 2 * df["midprice_std"]
@@ -304,7 +318,7 @@ class Predictor:
         X[:, 19:21] = self.volume_scaler.transform(X[:, 19:21])
 
         X = X.reshape(1, X.shape[0], X.shape[1])
-        X = X[:, 50:, :]
+        X = X[:, 20:, :]
         return X
 
 
