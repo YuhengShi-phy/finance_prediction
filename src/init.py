@@ -61,12 +61,8 @@ def main():
             "n_midprice"
         ].shift(-time_delay)
 
-        df_with_features[f"relabel_{time_delay}"] = eval.get_label(
-            df_with_features[f"midprice_after_{time_delay}"],
-            df_with_features["n_midprice"],
-            time_delay,
-            alpha1=0.002,
-        )
+        df_with_features[f"relabel_continue_{time_delay}"] = ( df_with_features[f"midprice_after_{time_delay}"] / df_with_features[f"n_midprice"] - 1 ) * 200
+        
         df_with_features = df_with_features.tail(len(df_with_features) - 51)
         df_with_features = df_with_features.head(len(df_with_features) - 10)
 
@@ -128,7 +124,7 @@ def main():
 
     # 构建模型
     input_shape = (X_train.shape[1], X_train.shape[2])
-    model = md.build_classification_model(input_shape)
+    model = md.build_continuous_model(input_shape)
     model.summary()
 
     # 训练模型
@@ -139,12 +135,17 @@ def main():
         epochs=5,
         batch_size=1024,
         verbose=1,
-        class_weight={0: 4, 1: 1, 2: 4},
+        # class_weight={0: 4, 1: 1, 2: 4},
     )
 
     # 预测示例
     y_pred = model.predict(X_test)
-    y_pred_custom = eval.one_hot_to_label(y_pred, 0.01)
+    y_pred_custom = eval.get_label(
+            X_test[1],
+            y_pred,
+            time_delay,
+            alpha1=0.0015 * 200,
+        )
     # pt.plot_predict_curve(y_test, y_pred)
     y_pred = np.argmax(y_pred, axis=1)
 
