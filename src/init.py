@@ -107,8 +107,8 @@ def main(time_delay=5):
         - df_with_features_9["n_midprice"]
     ) / df_with_features_9["n_midprice"]
 
-    df_with_features_9 = df_with_features_9.tail(len(df_with_features_9) - 51)
-    df_with_features_9 = df_with_features_9.head(len(df_with_features_9) - 10)
+    df_with_features_9 = df_with_features_9.tail(len(df_with_features_9) - 20)
+    df_with_features_9 = df_with_features_9.head(len(df_with_features_9) - time_delay)
     X_test, y_test = dp.sequentialize_certain_features(
         df_with_features_9,
         dp.selected_features,
