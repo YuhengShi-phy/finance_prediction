@@ -16,17 +16,10 @@ def print_memory_usage(label=""):
     print(f"{label} - Memory usage: {mem_info.rss / 1024 / 1024:.2f} MB")
 
 
-# ----------
-# Next step:
-# these features may be divided into several parts, including
-# price, volume, technical, and volatility
-# But it might take a fucking lot of time, for god's sake!
-
-
 def main(time_delay=5):
-    print("=" * 100)
-    print("~" * 100)
-    print("=" * 100)
+    print("=" * 101)
+    print("~" * 38 + f"Time delay = {time_delay}" + "~" * 38)
+    print("=" * 101)
     print("Data Preprocessing ...")
     sequence_length = 80
 
