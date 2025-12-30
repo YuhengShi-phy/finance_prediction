@@ -129,9 +129,14 @@ def build_continuous_model(input_shape):
             Dense(1, activation="tanh"),  # 3个类别：0,1,2
         ]
     )
-
+    optimizer = keras.optimizers.Adam(
+        learning_rate=0.0001,
+        beta_1=0.9,
+        beta_2=0.999,
+        clipnorm=1.0,  # 梯度裁剪，防止梯度爆炸
+    )
     model.compile(
-        optimizer="adam",
+        optimizer=optimizer,
         loss="mse",
     )
 
