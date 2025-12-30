@@ -78,14 +78,14 @@ def main(time_delay=5):
             f"relabel_continue_{time_delay}",
             sequence_length,
         )
-        y_single_code = eval.label_to_double_one_hot(y_single)
+        # y_single_code = eval.label_to_double_one_hot(y_single)
         # print_memory_usage(f"After sequentializing stock {i}")
 
         # (X_train_single, X_test_single, y_train_single, y_test_single) = dp.split(
         #     X_single, y_single, test_size=0.2
         # )
         X_train_single = X_single
-        y_train_single = y_single_code
+        y_train_single = y_single
         # print_memory_usage(f"After splitting data of stock {i}")
 
         # Incremental concatenation
