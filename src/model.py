@@ -15,7 +15,6 @@ from tensorflow.keras.layers import (
     Bidirectional,
 )
 from tensorflow.keras.regularizers import l2
-from tensorflow.keras import backend as K
 
 
 def build_conv_residual_block(input_shape):
@@ -92,16 +91,15 @@ def build_base_model(input_shape):
 
 # Get classification model with compiling
 def build_classification_model(input_shape, num_classes=3):
-    model = Sequential(
-        [
-            build_base_model(input_shape),
-            Dense(64, activation="relu", kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(32, activation="relu", kernel_regularizer=l2(0.01)),
-            Dropout(0.3),
-            Dense(num_classes, activation="softmax"),  # 3个类别：0,1,2
-        ]
-    )
+
+    inputs = keras.Input(input_shape)
+    x = build_base_model(input_shape)(inputs)
+    x = Dense(64, activation="relu", kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+    x = Dense(32, activation="relu", kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+    outputs = Dense(num_classes, activation="softmax")(x)
+    model = keras.Model(inputs, outputs)
 
     optimizer = keras.optimizers.Adam(
         learning_rate=0.0001,
@@ -111,8 +109,8 @@ def build_classification_model(input_shape, num_classes=3):
     )
     model.compile(
         optimizer=optimizer,
-        loss="sparse_categorical_crossentropy",
-        metrics=[eval.FBetaScore()],
+        loss="categorical_crossentropy",
+        # metrics=[eval.FBetaScore()],
     )
 
     return model
@@ -120,20 +118,79 @@ def build_classification_model(input_shape, num_classes=3):
 
 # Get model that process continuous data like n_midprice
 def build_continuous_model(input_shape):
-    model = Sequential(
-        [
-            build_base_model(input_shape),
-            Dense(64, activation="tanh", kernel_regularizer=l2(0.01)),
-            Dropout(0.1),
-            Dense(32, activation="tanh", kernel_regularizer=l2(0.01)),
-            Dropout(0.1),
-            Dense(1, activation="tanh"),  # 3个类别：0,1,2
-        ]
-    )
 
+    inputs = keras.Input(input_shape)
+    x = build_base_model(input_shape)(inputs)
+    x = Dense(64, activation="tanh", kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+    x = Dense(32, activation="tanh", kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+    outputs = Dense(1, activation="tanh")(x)
+    model = keras.Model(inputs, outputs)
+
+    optimizer = keras.optimizers.Adam(
+        learning_rate=0.0001,
+        beta_1=0.9,
+        beta_2=0.999,
+        clipnorm=1.0,  # 梯度裁剪，防止梯度爆炸
+    )
     model.compile(
-        optimizer="adam",
+        optimizer=optimizer,
         loss="mse",
     )
 
     return model
+
+
+def build_evidential_model(input_shape):
+    inputs = keras.Input(input_shape)
+
+    # 特征提取（复用您现有的base_model）
+    x = build_base_model(input_shape)(inputs)
+
+    # 证据头
+    x = Dense(64, activation="relu", kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+    x = Dense(32, activation="relu", kernel_regularizer=l2(0.01))(x)
+    x = Dropout(0.3)(x)
+
+    # 证据输出（2个正数）
+    evidence = Dense(2, activation="softplus", name="evidence")(x)
+
+    # Dirichlet参数 α = evidence + 1
+    alpha = keras.layers.Lambda(lambda e: e + 1.0, name="alpha")(evidence)
+
+    model = keras.Model(inputs=inputs, outputs=alpha)
+
+    # 编译使用Dirichlet损失
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=0.0001),
+        loss=dirichlet_loss,
+    )
+    return model
+
+
+# 在损失函数中体现
+def dirichlet_loss(y_true, y_pred_alpha):
+    """
+    y_true: 真实标签的one-hot编码
+    y_pred_alpha: 预测的Dirichlet参数
+    """
+    # 防止数值不稳定
+    y_pred_alpha = tf.clip_by_value(y_pred_alpha, 1e-8, 1e8)
+
+    # 计算总强度S
+    S = tf.reduce_sum(y_pred_alpha, axis=1, keepdims=True)
+
+    # Dirichlet损失包含两部分：
+    # 1. 拟合误差（类似交叉熵）
+    error_loss = tf.reduce_sum((y_true - y_pred_alpha / S) ** 2, axis=1)
+
+    # 2. 正则化项（惩罚过度自信）
+    # 当S很大但预测错误时，这个惩罚会很大
+    reg_loss = tf.reduce_sum(
+        y_pred_alpha * (S - y_pred_alpha) / (S**2 * (S + 1)), axis=1
+    )
+
+    total_loss = error_loss + reg_loss
+    return tf.reduce_mean(total_loss)

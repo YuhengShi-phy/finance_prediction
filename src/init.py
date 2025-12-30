@@ -16,14 +16,13 @@ def print_memory_usage(label=""):
     print(f"{label} - Memory usage: {mem_info.rss / 1024 / 1024:.2f} MB")
 
 
-# ----------
-# Next step:
-# these features may be divided into several parts, including
-# price, volume, technical, and volatility
-# But it might take a fucking lot of time, for god's sake!
+def main(time_delay=5):
+    print("=" * 101)
+    print("~" * 38 + f"Time delay = {time_delay}" + "~" * 38)
+    print("=" * 101)
 
 
-def main(time_delay = 5):
+def main(time_delay=5):
     print("=" * 100)
     print("~" * 100)
     print("=" * 100)
@@ -56,11 +55,17 @@ def main(time_delay = 5):
         #     df_with_features["n_midprice"].shift(-time_delay)
         #     - df_with_features["n_midprice"]
         # ) / (df_with_features["n_midprice"])
+        df_with_features = df_with_features.head(len(df_with_features) - time_delay)
+        df_with_features = df_with_features.tail(len(df_with_features) - 20)
         df_with_features[f"midprice_after_{time_delay}"] = df_with_features[
             "n_midprice"
         ].shift(-time_delay)
 
-        df_with_features[f"relabel_continue_{time_delay}"] = ( df_with_features[f"midprice_after_{time_delay}"] / df_with_features[f"n_midprice"] - 1 ) * 200
+        df_with_features[f"relabel_continue_{time_delay}"] = (
+            df_with_features[f"midprice_after_{time_delay}"]
+            / df_with_features[f"n_midprice"]
+            - 1
+        ) * 200
 
         df_with_features = df_with_features.tail(len(df_with_features) - 20)
         df_with_features = df_with_features.head(len(df_with_features) - time_delay)
@@ -73,6 +78,7 @@ def main(time_delay = 5):
             f"relabel_continue_{time_delay}",
             sequence_length,
         )
+        # y_single_code = eval.label_to_double_one_hot(y_single)
         # print_memory_usage(f"After sequentializing stock {i}")
 
         # (X_train_single, X_test_single, y_train_single, y_test_single) = dp.split(
@@ -110,6 +116,7 @@ def main(time_delay = 5):
         f"label_{time_delay}",
         sequence_length,
     )
+    y_test_code = eval.label_to_double_one_hot(y_test)
     print("-" * 50)
 
     X_train, X_test = dp.scale(X_train, X_test)
@@ -132,20 +139,20 @@ def main(time_delay = 5):
         validation_data=(X_test, y_test),
         epochs=0,
         batch_size=1024,
-                                               )
+    )
 
     # 预测示例
     y_pred = model.predict(X_test)
-    
+
     for i in range(15):
-        alpha_1 = 0.0005 +0.0001 * i
-        alpha_2 = 0.001 +0.0001 * i
+        alpha_1 = 0.0005 + 0.0001 * i
+        alpha_2 = 0.001 + 0.0001 * i
         y_pred_custom = eval.get_label(
-                y_pred,
-                np.zeros(shape=(len(y_pred))),
-                time_delay,
-                alpha1=alpha_1 * 200,
-                alpha2=alpha_2 * 200,
+            y_pred,
+            np.zeros(shape=(len(y_pred))),
+            time_delay,
+            alpha1=alpha_1 * 200,
+            alpha2=alpha_2 * 200,
         )
         y_pred_custom = np.asarray(y_pred_custom)
         # pt.plot_predict_curve(y_test, y_pred)
@@ -159,10 +166,10 @@ def main(time_delay = 5):
         # print(f"The first 20 true labels: {y_test[:20]}")
 
         test_score = eval.calculate_f_beta_multiclass(y_test, y_pred_custom)
-        #test_score_custom = eval.calculate_f_beta_multiclass(y_test, y_pred_custom)
-        #test_pnl_average = eval.calculate_pnl_average(
+        # test_score_custom = eval.calculate_f_beta_multiclass(y_test, y_pred_custom)
+        # test_pnl_average = eval.calculate_pnl_average(
         #    df_with_features_9, y_pred, time_delay
-        #)
+        # )
         test_pnl_average_custom = eval.calculate_pnl_average(
             df_with_features_9, y_pred_custom, time_delay
         )
@@ -173,7 +180,7 @@ def main(time_delay = 5):
         if time_delay == 5 or time_delay == 10:
             print(f"alpha: {alpha_1}")
         else:
-            print(f"alpha: {alpha_2}") 
+            print(f"alpha: {alpha_2}")
 
     # y_train_pred = model.predict(X_train)
     # pt.plot_predict_curve(y_train, y_trai n_pred)
@@ -181,7 +188,7 @@ def main(time_delay = 5):
     # X_train_original = price_scaler.inverse_transform(
     #     X_train[:, 99, 0:3].reshape(-1, 3)
     # )
- # y_train_pred = eval.get_label(y_train_pred, X_train_original[:, 1], 5)
+    # y_train_pred = eval.get_label(y_train_pred, X_train_original[:, 1], 5)
     # y_train = eval.get_label(y_train, X_train_original[:, 1], 5)
 
     # train_score = eval.calculate_f_beta_multiclass(y_train, y_train_pred)

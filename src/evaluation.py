@@ -1,4 +1,3 @@
-from operator import le
 import numpy as np
 from numpy.typing import NDArray
 import pandas as pd
@@ -156,7 +155,7 @@ def check_feature_distributions(df: pd.DataFrame, features: list[str]):
 
 # converts the one-hot coding to labels, with threshold
 # shape of y: (n_samples, 3)
-def one_hot_to_label(y: NDArray, threshold: float):
+def triple_one_hot_to_label(y: NDArray, threshold: float):
     y0, y1, y2 = y[:, 0], y[:, 1], y[:, 2]
     # 创建条件数组
     cond1 = y0 - y2 > threshold  # 取0的条件
@@ -180,6 +179,86 @@ def one_hot_to_label(y: NDArray, threshold: float):
     result[mask] = subset_result
 
     return result
+
+
+def double_one_hot_to_label(y: NDArray, threshold=0.001):
+    y0 = y[:, 0]
+    y1 = y[:, 1]
+
+    # 创建条件数组
+    cond1 = y0 - y1 > threshold  # 取0的条件
+    cond2 = y1 - y0 > threshold  # 取2的条件
+
+    # 使用np.select进行条件选择
+    return np.select([cond1, cond2], [0, 2], default=1)
+
+
+def adaptive_threshold_double_one_hot_to_label(y: NDArray, adaptive_percentile=0.3):
+    """
+    自适应阈值方法：根据预测分布的百分位数确定阈值
+    """
+    y0 = y[:, 0]
+    y1 = y[:, 1]
+
+    # 计算预测置信度的差异
+    conf_diff = np.abs(y0 - y1)
+
+    # 使用百分位数作为阈值（例如，差异小于30%分位数的视为不确定）
+    threshold = np.percentile(conf_diff, adaptive_percentile * 100)
+
+    # 创建条件数组
+    cond1 = y0 - y1 > threshold  # 取0的条件
+    cond2 = y1 - y0 > threshold  # 取2的条件
+
+    return np.select([cond1, cond2], [0, 2], default=1)
+
+
+def adaptive_decision_with_uncertainty(y_pred_alpha, base_threshold=0.001):
+    """
+    基于不确定性的自适应决策
+    y_pred_alpha: Dirichlet分布参数α, shape=(n_samples,     1)
+    """
+    # 计算预测概率和不确定性
+    S = np.sum(y_pred_alpha, axis=1, keepdims=True)
+    prob = y_pred_alpha / S
+    uncertainty = 2.0 / S.flatten()  # 对于2类问题
+
+    # 概率差异
+    prob_diff = np.abs(prob[:, 0] - prob[:, 1])
+
+    # 不确定性自适应阈值
+    # 不确定性高时使用更保守的阈值，避免错误预测
+    adaptive_threshold = base_threshold * (1 + uncertainty)
+
+    # 创建条件
+    cond_buy = prob[:, 1] - prob[:, 0] > adaptive_threshold
+    cond_sell = prob[:, 0] - prob[:, 1] > adaptive_threshold
+
+    # 决策
+    decisions = np.ones(len(prob))  # 默认持币（类别1）
+    decisions[cond_buy] = 2  # 买入
+    decisions[cond_sell] = 0  # 卖出
+
+    # 同时返回不确定性，可用于风险控制
+    return decisions, uncertainty, prob_diff
+
+
+def label_to_double_one_hot(labels: NDArray):
+    labels = np.asarray(labels)
+
+    # 定义编码映射
+    encoding_map = np.array(
+        [[1.0, 0.0], [0.5, 0.5], [0.0, 1.0]],  # label 0  # label 1  # label 2
+        dtype=np.float32,
+    )
+
+    # 验证标签范围
+    if np.any((labels < 0) | (labels > 2)):
+        raise ValueError("标签值必须在[0, 2]范围内")
+
+    # 直接使用索引获取编码
+    # 注意：这种方法要求labels是整数，且范围在0-2
+    return encoding_map[labels.astype(int)]
 
 
 def calculate_pnl_average(df: pd.DataFrame, pred_labels: NDArray, time_delay: int):

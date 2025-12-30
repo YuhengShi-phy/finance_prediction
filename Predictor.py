@@ -26,16 +26,33 @@ def log_transform(df: pd.DataFrame, features):
     return df
 
 
-def double_one_hot_to_label(y: NDArray, threshold=0.001):
-    y0 = y[:, 0]
-    y1 = y[:, 1]
+def get_label(
+    y, X, time_delay, alpha1=0.0005, alpha2=0.001
+):  # y可为y_test或y_pred，Day为一个数[5,10,20,40,60]
+    # X = X_test[:, 99, 0]
+    if time_delay in [5, 10]:
+        alpha = alpha1
+    elif time_delay in [20, 40, 60]:
+        alpha = alpha2
+    else:
+        # 如果N不在预期值中，使用默认值或抛出异常
+        raise ValueError(
+            f"不支持的时间步长N={time_delay}，支持的值为[5, 10, 20, 40, 60]"
+        )
 
-    # 创建条件数组
-    cond1 = y0 - y1 > threshold  # 取0的条件
-    cond2 = y1 - y0 > threshold  # 取2的条件
+    y = np.asarray(y)
+    X = np.asarray(X)
 
-    # 使用np.select进行条件选择
-    return np.select([cond1, cond2], [0, 2], default=1)
+    # Squeeze to prevent broadcast error
+    y = np.squeeze(y)
+    price_diff = y - X
+
+    # 使用 np.select 进行高效的条件选择
+    conditions = [price_diff < -alpha, price_diff > alpha]
+    choices = [0, 2]
+    labels = np.select(conditions, choices, default=1)
+
+    return labels
 
 
 class Predictor:
@@ -72,7 +89,7 @@ class Predictor:
         ]
 
         self.input_shape = (80, 25)
-        self.num_classes = 3
+        self.num_classes = 2
         self._build_model_architecture()
         self.balance_scaler = joblib.load(
             os.path.join(os.path.dirname(__file__), "balance.joblib")
@@ -90,15 +107,15 @@ class Predictor:
         for df in data:
             X = self.preprocess(df)
             pred_labels = []
-            for td in [5, 10, 20, 40, 60]:
+            for td in [40]:
                 self._load_weights(
                     os.path.join(
-                        os.path.dirname(__file__), f"onehot_model_{td}.weights.h5"
+                        os.path.dirname(__file__), f"continue_model_{td}.weights.h5"
                     )
                 )
                 y = self.model.predict(X)
-                y = double_one_hot_to_label(y, threshold=0.45)
-                pred_labels.append(y)
+                y = get_label(y, np.zeros(len(y)), td, 0.0019 * 200, 0.0019 * 200)
+                pred_labels.append(y[0])
 
             results.append(pred_labels)
 
@@ -172,11 +189,11 @@ class Predictor:
         # 构建完整模型
         inputs = keras.Input(shape=self.input_shape)
         x = build_base_model(self.input_shape)(inputs)
-        x = Dense(64, activation="relu", kernel_regularizer=l2(0.01))(x)
+        x = Dense(64, activation="tanh", kernel_regularizer=l2(0.01))(x)
         # x = Dropout(0.3)(x)
-        x = Dense(32, activation="relu", kernel_regularizer=l2(0.01))(x)
+        x = Dense(32, activation="tanh", kernel_regularizer=l2(0.01))(x)
         # x = Dropout(0.3)(x)
-        outputs = Dense(self.num_classes, activation="softmax")(x)
+        outputs = Dense(1, activation="tanh")(x)
 
         self.model = keras.Model(inputs=inputs, outputs=outputs)
 
@@ -326,12 +343,12 @@ def test():
     pred = Predictor()
     df = pd.read_csv("./merged_data/merged_0.csv")
     data = []
-    for i in range(10):
+    for i in range(100):
         data.append(df.iloc[i : 100 + i])
 
     result = pred.predict(data)
-    print(df.iloc[99:109]["label_5"])
     print(result)
+    print(np.any(np.isnan(np.asarray(result))))
 
     pass
 
