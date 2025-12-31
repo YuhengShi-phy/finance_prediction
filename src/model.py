@@ -143,19 +143,10 @@ def build_continuous_model(input_shape):
 
 def new_mse():
     def loss(y_true, y_pred):
-        error = y_pred - y_true
-        pm = y_pred * y_true  # product of prediction and true value
-        
-        # 分离正负错误
-        correct_error = tf.where(pm >= 0 or error <=0.005, error, 0)  # 同号（预测和真实值符号相同）
-        wrong_error = tf.where(pm < 0 and error > 0.005, -error, 0)    # 异号（预测和真实值符号相反）
-        
-        # 分别加权计算损失
-        loss_value = (10.0 * tf.square(wrong_error) + 
-                     tf.square(correct_error))  # 注意：是10.0，不是10t
-        
+        # 使用TensorFlow的操作
+        error = tf.sign(y_pred) * tf.math.log1p(tf.abs(y_pred)) - tf.sign(y_true) * tf.math.log1p(tf.abs(y_true))
+        loss_value = tf.square(error)
         return tf.reduce_mean(loss_value)
-    
     return loss
 
 def build_evidential_model(input_shape):
